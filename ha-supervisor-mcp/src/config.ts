@@ -1,5 +1,5 @@
 // Runtime configuration: add-on options from <data>/options.json, plus a few
-// environment overrides so the server can run outside the add-on for tests.
+// environment overrides so the server can run outside the add-on (tests, dev).
 
 import { randomBytes } from 'node:crypto';
 import { chmod, readFile, rm, writeFile } from 'node:fs/promises';
@@ -22,6 +22,9 @@ export interface Config {
   options: Options;
   cidrs: Cidr[];
   roots: string[];
+  /** Where Supervisor mounts every add-on's config dir (`all_addon_configs`). */
+  addonConfigsDir: string;
+  shell: string;
   port: number;
   token: string;
 }
@@ -46,8 +49,8 @@ async function loadToken(dataDir: string, options: Options): Promise<string> {
   await writeFile(file, token + '\n', { mode: 0o600 });
   await chmod(file, 0o600);
   // Printed once per generation so it can be copied into the MCP client.
-  console.log(`ha-ops-mcp: new bearer token generated: ${token}`);
-  console.log('ha-ops-mcp: send it as "Authorization: Bearer <token>". It is not printed again.');
+  console.log(`ha-supervisor-mcp: new bearer token generated: ${token}`);
+  console.log('ha-supervisor-mcp: send it as "Authorization: Bearer <token>". It is not printed again.');
   return token;
 }
 
@@ -62,12 +65,14 @@ async function clearRotateFlag(options: Options): Promise<void> {
 }
 
 export async function loadConfig(): Promise<Config> {
-  const dataDir = env('OPS_DATA_DIR') ?? '/data';
+  const dataDir = env('DATA_DIR') ?? '/data';
   const options = Options.parse(JSON.parse(await readFile(join(dataDir, 'options.json'), 'utf8')));
   const cidrs = options.allow_cidrs.map(parseCidr);
-  const roots = env('OPS_ROOTS')?.split(',') ?? DEFAULT_ROOTS;
-  const port = Number(env('OPS_PORT') ?? 9584);
+  const roots = env('FILE_ROOTS')?.split(',') ?? DEFAULT_ROOTS;
+  const addonConfigsDir = env('ADDON_CONFIGS_DIR') ?? '/addon_configs';
+  const shell = env('EXEC_SHELL') ?? '/bin/bash';
+  const port = Number(env('PORT') ?? 9584);
   const token = await loadToken(dataDir, options);
   if (options.rotate_token) await clearRotateFlag(options);
-  return { options: { ...options, rotate_token: false }, cidrs, roots, port, token };
+  return { options: { ...options, rotate_token: false }, cidrs, roots, addonConfigsDir, shell, port, token };
 }

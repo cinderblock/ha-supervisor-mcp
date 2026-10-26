@@ -17,13 +17,28 @@ let config: Config;
 let server: ReturnType<typeof startServer>;
 let fakeSupervisor: ReturnType<typeof Bun.serve>;
 const supervisorCalls: { method: string; path: string; body: unknown }[] = [];
+let checkFails = false;
+const fakeData = {
+  '/info': { machine: 'yellow', arch: 'aarch64', supported: true, healthy: true },
+  '/host/info': { hostname: 'homeassistant', disk_total: 100, disk_used: 40, disk_free: 60 },
+  '/core/info': { version: '2026.10.1', version_latest: '2026.10.2', update_available: true },
+  '/os/info': { version: '17.0', version_latest: '17.0', update_available: false, board: 'yellow' },
+  '/supervisor/info': { version: '2026.10.0', version_latest: '2026.10.0', update_available: false, channel: 'stable' },
+  '/addons': {
+    addons: [
+      { slug: 'caddy', name: 'Caddy', state: 'started', version: '1', version_latest: '2', update_available: true, repository: 'x' },
+      { slug: 'nodir', name: 'No dir', state: 'stopped', version: '1', version_latest: '1', update_available: false, repository: 'x' },
+    ],
+  },
+  '/addons/caddy/info': { state: 'started', version: '1' },
+};
 
 async function writeOptions(options: Record<string, unknown>) {
   await writeFile(join(dataDir, 'options.json'), JSON.stringify(options));
 }
 
 beforeAll(async () => {
-  base = await mkdtemp(join(tmpdir(), 'ha-ops-mcp-e2e-'));
+  base = await mkdtemp(join(tmpdir(), 'ha-supervisor-mcp-e2e-'));
   root = join(base, 'addon_configs');
   dataDir = join(base, 'data');
   await mkdir(join(root, 'caddy'), { recursive: true });
@@ -31,16 +46,28 @@ beforeAll(async () => {
   fakeSupervisor = Bun.serve({
     port: 0,
     async fetch(req) {
-      const body = req.method === 'GET' ? undefined : await req.json();
+      const text = await req.text();
+      const body = text ? JSON.parse(text) : undefined;
       supervisorCalls.push({ method: req.method, path: new URL(req.url).pathname, body });
       if (req.headers.get('authorization') !== 'Bearer sup-token') return new Response('no', { status: 401 });
-      return Response.json({ result: 'ok', data: { echo: new URL(req.url).pathname } });
+      const path = new URL(req.url).pathname;
+      if (path === '/addons/caddy/logs') {
+        return new Response(`range=${req.headers.get('range')} accept=${req.headers.get('accept')}\n`, {
+          headers: { 'Content-Type': 'text/plain' },
+        });
+      }
+      if (path === '/core/check' && checkFails) {
+        return Response.json({ result: 'error', message: 'Invalid config for [http]' }, { status: 400 });
+      }
+      const data = (fakeData as Record<string, unknown>)[path] ?? { echo: path };
+      return Response.json({ result: 'ok', data });
     },
   });
   Object.assign(process.env, {
-    OPS_DATA_DIR: dataDir,
-    OPS_ROOTS: root,
-    OPS_PORT: '0',
+    DATA_DIR: dataDir,
+    FILE_ROOTS: root,
+    ADDON_CONFIGS_DIR: root,
+    PORT: '0',
     SUPERVISOR_URL: `http://127.0.0.1:${fakeSupervisor.port}`,
     SUPERVISOR_TOKEN: 'sup-token',
   });
@@ -117,7 +144,21 @@ describe('tools', () => {
 
   test('lists the expected tools', async () => {
     const names = (await client.listTools()).tools.map(t => t.name).sort();
-    expect(names).toEqual(['delete_path', 'exec', 'list_dir', 'read_file', 'supervisor_api', 'write_file']);
+    expect(names).toEqual([
+      'addon_list_files',
+      'addon_logs',
+      'addon_read_file',
+      'addon_restart',
+      'addon_write_file',
+      'core_check_config',
+      'delete_path',
+      'exec',
+      'list_dir',
+      'read_file',
+      'supervisor_api',
+      'system_overview',
+      'write_file',
+    ]);
   });
 
   test('write → read → list → conditional write → delete', async () => {
@@ -178,6 +219,59 @@ describe('tools', () => {
     expect(slow.json.timed_out).toBe(true);
 
     expect((await call(client, 'exec', {})).isError).toBe(true);
+  });
+
+  test('system_overview combines Supervisor info and marks config dirs', async () => {
+    const r = await call(client, 'system_overview', {});
+    expect(r.json).toMatchObject({
+      hostname: 'homeassistant',
+      core: { version: '2026.10.1', update_available: true },
+      disk: { free_gb: 60 },
+    });
+    const bySlug = Object.fromEntries(r.json.addons.map((a: { slug: string }) => [a.slug, a]));
+    expect(bySlug.caddy).toMatchObject({ config_dir: join(root, 'caddy'), version_latest: '2' });
+    expect(bySlug.nodir.config_dir).toBeNull();
+  });
+
+  test('addon_* file tools are confined to the add-on dir', async () => {
+    const w = await call(client, 'addon_write_file', {
+      slug: 'caddy',
+      path: 'sites.d/a.caddy',
+      content: 'a {}\n',
+      create_dirs: true,
+      restart: true,
+      log_lines: 7,
+    });
+    expect(w.isError).toBe(false);
+    expect(await readFile(join(root, 'caddy', 'sites.d', 'a.caddy'), 'utf8')).toBe('a {}\n');
+    expect(w.json.restart).toMatchObject({ slug: 'caddy', state: 'started' });
+    expect(w.json.restart.logs).toBe('range=entries=:-7: accept=text/plain\n');
+    expect(supervisorCalls.some(c => c.method === 'POST' && c.path === '/addons/caddy/restart')).toBe(true);
+
+    const r = await call(client, 'addon_read_file', { slug: 'caddy', path: 'sites.d/a.caddy' });
+    expect(r.json.content).toBe('a {}\n');
+    const l = await call(client, 'addon_list_files', { slug: 'caddy' });
+    expect(l.json.entries.map((e: { name: string }) => e.name)).toContain('sites.d/a.caddy');
+
+    const escape = await call(client, 'addon_read_file', { slug: 'caddy', path: '../other/x' });
+    expect(escape.isError).toBe(true);
+    expect(escape.text).toContain('outside the allowed roots');
+    const badSlug = await call(client, 'addon_read_file', { slug: '../caddy', path: 'x' });
+    expect(badSlug.isError).toBe(true);
+    const noDir = await call(client, 'addon_list_files', { slug: 'nodir' });
+    expect(noDir.text).toContain('does not exist');
+  });
+
+  test('core_check_config reports valid, and surfaces the error when not', async () => {
+    expect((await call(client, 'core_check_config', {})).json).toEqual({ valid: true });
+    checkFails = true;
+    try {
+      const bad = await call(client, 'core_check_config', {});
+      expect(bad.isError).toBe(true);
+      expect(bad.text).toContain('Invalid config for [http]');
+    } finally {
+      checkFails = false;
+    }
   });
 
   test('supervisor_api passes through with the add-on token', async () => {

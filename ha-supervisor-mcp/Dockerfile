@@ -1,6 +1,6 @@
-# ha-ops-mcp: a Bun MCP server, wrapped as a Home Assistant add-on.
+# ha-supervisor-mcp: a Bun MCP server, wrapped as a Home Assistant add-on.
 # Built per-arch natively in CI (ubuntu-24.04 + ubuntu-24.04-arm) and
-# stitched into a multi-arch manifest at ghcr.io/cinderblock/ha-ops-mcp.
+# stitched into a multi-arch manifest at ghcr.io/cinderblock/ha-supervisor-mcp.
 
 FROM oven/bun:1-alpine
 
@@ -27,11 +27,11 @@ COPY src ./src
 ARG BUILD_VERSION
 ARG BUILD_ARCH
 LABEL \
-    io.hass.name="HA Ops MCP" \
-    io.hass.description="Box-level MCP server for agents" \
+    io.hass.name="HA Supervisor MCP" \
+    io.hass.description="Supervisor-level MCP server for agents" \
     io.hass.type="addon" \
     io.hass.version="${BUILD_VERSION}" \
     io.hass.arch="${BUILD_ARCH}" \
-    org.opencontainers.image.source="https://github.com/cinderblock/ha-ops-mcp"
+    org.opencontainers.image.source="https://github.com/cinderblock/ha-supervisor-mcp"
 
 ENTRYPOINT ["bun", "run", "/app/src/main.ts"]

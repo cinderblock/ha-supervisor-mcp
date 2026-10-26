@@ -1,15 +1,17 @@
-# HA Ops MCP
+# HA Supervisor MCP
 
-Box-level MCP server for agents, as a companion to ha-mcp. Use ha-mcp for Home Assistant itself. Use
-this add-on for add-on config dirs (`/addon_configs/<slug>`), arbitrary files, a
-shell, and raw Supervisor API calls.
+Supervisor-level MCP server for agents, as a companion to a Core-level MCP server
+such as ha-mcp. Tools: `system_overview`; `addon_list_files`, `addon_read_file`
+and `addon_write_file` (with an optional restart) for any add-on's config dir;
+`addon_restart`; `addon_logs`; `core_check_config`; general file tools; `exec`;
+and `supervisor_api`.
 
 ## First start
 
 The log prints the bearer token once:
 
 ```
-ha-ops-mcp: new bearer token generated: <token>
+ha-supervisor-mcp: new bearer token generated: <token>
 ```
 
 Point your MCP client at `http://<this host>:9584/mcp` with the header
@@ -29,6 +31,6 @@ a new token and sets the option back to `false`.
 Whoever holds the token can read and write every add-on's config, HA's config
 and the backups, and can manage add-ons. Treat it like an admin password. The
 add-on has no Docker access and no host network or extra privileges, and every
-state-changing call is logged here as an `audit` line.
+state-changing call (writes, deletes, restarts, exec, non-GET Supervisor calls) is logged here as an `audit` line.
 
-Full documentation: <https://github.com/cinderblock/ha-ops-mcp>
+Full documentation: <https://github.com/cinderblock/ha-supervisor-mcp>

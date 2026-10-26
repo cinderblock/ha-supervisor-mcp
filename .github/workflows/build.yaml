@@ -4,23 +4,23 @@ on:
   push:
     branches: [master]
     paths:
-      - ha-ops-mcp/**
+      - ha-supervisor-mcp/**
       - .github/workflows/build.yaml
   pull_request:
     paths:
-      - ha-ops-mcp/**
+      - ha-supervisor-mcp/**
       - .github/workflows/build.yaml
   workflow_dispatch:
 
 env:
-  IMAGE: ghcr.io/cinderblock/ha-ops-mcp
+  IMAGE: ghcr.io/cinderblock/ha-supervisor-mcp
 
 jobs:
   test:
     runs-on: ubuntu-24.04
     defaults:
       run:
-        working-directory: ha-ops-mcp
+        working-directory: ha-supervisor-mcp
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -60,12 +60,12 @@ jobs:
       - id: version
         shell: bash
         run: |
-          VERSION=$(grep '^version:' ha-ops-mcp/config.yaml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          VERSION=$(grep '^version:' ha-supervisor-mcp/config.yaml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - uses: docker/build-push-action@v6
         with:
-          context: ./ha-ops-mcp
+          context: ./ha-supervisor-mcp
           platforms: ${{ matrix.platform }}
           push: true
           tags: |
@@ -125,7 +125,7 @@ jobs:
       - id: version
         shell: bash
         run: |
-          VERSION=$(grep '^version:' ha-ops-mcp/config.yaml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          VERSION=$(grep '^version:' ha-supervisor-mcp/config.yaml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create multi-arch manifest

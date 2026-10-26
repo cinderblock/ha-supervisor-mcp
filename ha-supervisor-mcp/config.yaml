@@ -1,12 +1,12 @@
-name: HA Ops MCP
-version: "0.1.0"
-slug: ha-ops-mcp
-description: Box-level MCP server for agents - files in every add-on config dir, a shell, and the Supervisor API.
-url: https://github.com/cinderblock/ha-ops-mcp/tree/master/ha-ops-mcp
+name: HA Supervisor MCP
+version: "0.2.0"
+slug: ha-supervisor-mcp
+description: MCP server for agents at the Supervisor level - add-on config dirs and logs, files, backups, a shell, and the Supervisor API.
+url: https://github.com/cinderblock/ha-supervisor-mcp/tree/master/ha-supervisor-mcp
 arch:
   - amd64
   - aarch64
-image: ghcr.io/cinderblock/ha-ops-mcp
+image: ghcr.io/cinderblock/ha-supervisor-mcp
 init: false
 boot: auto
 startup: application

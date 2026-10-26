@@ -1,21 +1,39 @@
-# ha-ops-mcp
+# ha-supervisor-mcp
 
-A Home Assistant add-on that gives an MCP client (Claude Code, etc.) **box-level**
-access to a Home Assistant OS host. It is a companion to
-[ha-mcp](https://github.com/homeassistant-ai/ha-mcp), not a replacement:
+A Home Assistant add-on that gives an MCP client (Claude Code, etc.)
+**Supervisor-level** access to a Home Assistant OS (or Supervised) host: add-on
+config dirs, add-on restarts and logs, Core config checks, backups and other
+files, a shell, and the Supervisor API. It's a companion to a Core-level MCP
+server such as [ha-mcp](https://github.com/homeassistant-ai/ha-mcp), not a
+replacement:
 
 | Need | Use |
 | --- | --- |
 | Entities, automations, scripts, integrations, dashboards, HA config | ha-mcp |
-| Files in any add-on's config dir (`/addon_configs/<slug>`), anywhere under `/config`, `/share`, `/ssl`, `/media`, `/backup`, `/addons` | **ha-ops-mcp** |
-| A shell on the box (`ha` CLI, curl, jq, git, python3) | **ha-ops-mcp** |
-| Raw Supervisor API calls | **ha-ops-mcp** |
+| An add-on's config files (`/addon_configs/<slug>`): edit, restart, check its log | **ha-supervisor-mcp** |
+| Files anywhere under `/config`, `/share`, `/ssl`, `/media`, `/backup`, `/addons` | **ha-supervisor-mcp** |
+| A shell on the box (`ha` CLI, curl, jq, git, python3) | **ha-supervisor-mcp** |
+| Raw Supervisor API calls | **ha-supervisor-mcp** |
 
 ha-mcp's file tools run inside the HA Core container, which only mounts
 `/config`, `/ssl`, `/share` and `/media`, so it can never reach another add-on's
 config dir. This add-on maps those volumes into its own container instead.
 
 ## Tools
+
+Home Assistant tools:
+
+| Tool | What it does |
+| --- | --- |
+| `system_overview` | Core, Supervisor and OS versions and pending updates, disk, health, and every add-on (slug, state, version, config dir). Start here |
+| `addon_list_files` | List an add-on's config dir, by slug |
+| `addon_read_file` | Read a file in an add-on's config dir |
+| `addon_write_file` | Write a file in an add-on's config dir; with `restart: true`, also restart the add-on and return its state and latest log lines |
+| `addon_restart` | Restart an add-on, then return its state and latest log lines |
+| `addon_logs` | An add-on's latest log lines |
+| `core_check_config` | Validate Core's configuration, as `ha core check` does. Run it before restarting Core after editing `/config` |
+
+General tools, for anything the tools above don't cover:
 
 | Tool | What it does |
 | --- | --- |
@@ -26,8 +44,8 @@ config dir. This add-on maps those volumes into its own container instead.
 | `exec` | Run a command (`command` via `bash -c`, or `argv`) with a timeout. Can be turned off with `exec_enabled: false` |
 | `supervisor_api` | Call the Supervisor REST API with the add-on's own token (manager role) |
 
-File tools only accept absolute paths inside the mapped roots, and symlinks
-are resolved before that check. `exec` runs as root inside the add-on container, so
+File tools only accept paths inside the mapped roots (`addon_*` tools: inside
+that add-on's dir), and symlinks are resolved before that check. `exec` runs as root inside the add-on container, so
 it can reach the same volumes and nothing more.
 
 ## What it can and can't do
@@ -47,7 +65,7 @@ it can reach the same volumes and nothing more.
   [`api/middleware/security.py`](https://github.com/home-assistant/supervisor/blob/main/supervisor/api/middleware/security.py).
 
 Treat a client holding the token as an administrator of the box. Every write,
-delete, exec and non-GET Supervisor call is logged (`audit ...` lines) to the
+delete, restart, exec and non-GET Supervisor call is logged (`audit ...` lines) to the
 add-on log.
 
 ## Install
@@ -55,14 +73,14 @@ add-on log.
 In Home Assistant: **Settings → Add-ons → ⋮ → Repositories → Add**, paste
 
 ```
-https://github.com/cinderblock/ha-ops-mcp
+https://github.com/cinderblock/ha-supervisor-mcp
 ```
 
-Install **HA Ops MCP**, review the options, and start it. The add-on log shows
+Install **HA Supervisor MCP**, review the options, and start it. The add-on log shows
 the bearer token **once**, on first start:
 
 ```
-ha-ops-mcp: new bearer token generated: <token>
+ha-supervisor-mcp: new bearer token generated: <token>
 ```
 
 ## Options
@@ -78,7 +96,7 @@ ha-ops-mcp: new bearer token generated: <token>
 Claude Code (`~/.claude.json`, or `claude mcp add`):
 
 ```json
-"ha-ops": {
+"ha-supervisor": {
   "type": "http",
   "url": "http://homeassistant.local:9584/mcp",
   "headers": { "Authorization": "Bearer <token>" }
@@ -91,18 +109,19 @@ port 9584 beyond networks you trust.
 ## Develop
 
 ```sh
-cd ha-ops-mcp
+cd ha-supervisor-mcp
 bun install
 bun run typecheck
 bun test
 ```
 
 The tests run the real HTTP server and MCP client against temp directories and
-a fake Supervisor. For a local run, set `OPS_DATA_DIR` (containing an
-`options.json`), `OPS_ROOTS` (comma-separated) and `OPS_PORT`.
+a fake Supervisor. For a local run, set `DATA_DIR` (containing an
+`options.json`), `FILE_ROOTS` (comma-separated), `ADDON_CONFIGS_DIR`, `PORT`
+and, if `bash` isn't at `/bin/bash`, `EXEC_SHELL`.
 
 CI (`.github/workflows/build.yaml`) tests, then builds natively on amd64 and
-arm64 runners, then publishes the multi-arch `ghcr.io/cinderblock/ha-ops-mcp:<version>`
+arm64 runners, then publishes the multi-arch `ghcr.io/cinderblock/ha-supervisor-mcp:<version>`
 that the add-on's `config.yaml` points at. Bump `version` in **both**
 `config.yaml` and `package.json` (a test checks they match) and add a
 `CHANGELOG.md` entry for each release.

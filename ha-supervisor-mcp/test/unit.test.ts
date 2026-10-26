@@ -39,7 +39,7 @@ describe('tokenMatches', () => {
 });
 
 describe('resolveAllowed', async () => {
-  const base = await mkdtemp(join(tmpdir(), 'ha-ops-mcp-paths-'));
+  const base = await mkdtemp(join(tmpdir(), 'ha-supervisor-mcp-paths-'));
   const root = join(base, 'root');
   const outside = join(base, 'outside');
   await mkdir(join(root, 'sub'), { recursive: true });
