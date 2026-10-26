@@ -1,0 +1,19 @@
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local build outputs — never commit built artifacts
+*.tar
+*.tar.gz
+*.tgz
+dist/
+build/
+
+# Dependencies
+node_modules/

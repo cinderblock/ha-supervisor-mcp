@@ -1,0 +1,51 @@
+name: HA Ops MCP
+version: "0.1.0"
+slug: ha-ops-mcp
+description: Box-level MCP server for agents - files in every add-on config dir, a shell, and the Supervisor API.
+url: https://github.com/cinderblock/ha-ops-mcp/tree/master/ha-ops-mcp
+arch:
+  - amd64
+  - aarch64
+image: ghcr.io/cinderblock/ha-ops-mcp
+init: false
+boot: auto
+startup: application
+# manager: enough for the `ha` CLI and the Supervisor API to manage add-ons,
+# backups and updates. No docker_api, no host_network, no extra privileges.
+hassio_api: true
+hassio_role: manager
+homeassistant_api: true
+map:
+  - type: all_addon_configs
+    read_only: false
+  - type: homeassistant_config
+    read_only: false
+    path: /config
+  - type: share
+    read_only: false
+  - type: ssl
+    read_only: false
+  - type: media
+    read_only: false
+  - type: backup
+    read_only: false
+  - type: addons
+    read_only: false
+ports:
+  "9584/tcp": 9584
+ports_description:
+  "9584/tcp": MCP (Streamable HTTP at /mcp, bearer token)
+watchdog: tcp://[HOST]:[PORT:9584]
+options:
+  exec_enabled: true
+  rotate_token: false
+  allow_cidrs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 127.0.0.0/8
+schema:
+  exec_enabled: bool
+  rotate_token: bool
+  allow_cidrs:
+    - str
