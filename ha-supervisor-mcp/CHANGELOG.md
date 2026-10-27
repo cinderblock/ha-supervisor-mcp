@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2
+
+- `addon_restart` and `addon_write_file` with `restart: true` returned log
+  lines from *before* the restart: Supervisor reports "started" before the
+  add-on has logged anything. They now wait `settle_seconds` (default 5), then
+  read `/addons/<slug>/logs/latest`, which covers only the current run.
+- README: how to put TLS in front of the add-on and lock port 9584 to the
+  proxy.
+
 ## 0.2.1
 
 - `addon_logs` and the logs returned by `addon_restart` / `addon_write_file`

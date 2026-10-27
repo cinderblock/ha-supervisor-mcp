@@ -8,7 +8,7 @@ import { z } from 'zod';
 import type { Config } from './config.ts';
 import { audit, listDirAt, readFileAt, writeFileAt } from './files.ts';
 import { PathError } from './paths.ts';
-import { addonLogs, supervisorData } from './supervisor.ts';
+import { addonLogs, addonLogsSinceStart, supervisorData } from './supervisor.ts';
 import { fileArgs, result, writeArgs } from './tools.ts';
 
 const slugArg = z
@@ -19,6 +19,17 @@ const slugArg = z
 const relArg = z
   .string()
   .describe('Path relative to the add-on\'s config dir, e.g. global.d/site.caddy');
+
+const restartArgs = {
+  log_lines: z.number().int().min(1).max(1000).default(40),
+  settle_seconds: z
+    .number()
+    .int()
+    .min(0)
+    .max(120)
+    .default(5)
+    .describe('Seconds to wait after the restart before reading state and logs'),
+};
 
 interface AddonSummary {
   slug: string;
@@ -53,11 +64,16 @@ export function registerHaTools(server: McpServer, config: Config): void {
     return dir;
   }
 
-  async function restartAndCheck(slug: string, logLines: number) {
+  /**
+   * Restart, give the add-on `settleSeconds` to log its startup, then report its state and
+   * what it has logged since this start (not the previous run's shutdown).
+   */
+  async function restartAndCheck(slug: string, logLines: number, settleSeconds: number) {
     audit('addon_restart', { slug });
     await supervisorData('POST', `/addons/${slug}/restart`);
+    await Bun.sleep(settleSeconds * 1000);
     const info = await supervisorData<{ state: string; version: string }>('GET', `/addons/${slug}/info`);
-    return { slug, state: info.state, version: info.version, logs: await addonLogs(slug, logLines) };
+    return { slug, state: info.state, version: info.version, logs: await addonLogsSinceStart(slug, logLines) };
   }
 
   server.registerTool(
@@ -149,32 +165,36 @@ export function registerHaTools(server: McpServer, config: Config): void {
     {
       description:
         "Write a file in an add-on's config dir (/addon_configs/<slug>), atomically. With restart=true, " +
-        'also restarts the add-on and returns its state and latest log lines, so one call applies and ' +
-        'verifies a config change. Use if_sha256 (from addon_read_file) to avoid clobbering concurrent edits.',
+        'also restarts the add-on and returns its state and what it logged since starting, so one call ' +
+        'applies and verifies a config change. Use if_sha256 (from addon_read_file) to avoid clobbering ' +
+        'concurrent edits.',
       inputSchema: {
         slug: slugArg,
         path: relArg,
         ...writeArgs,
         restart: z.boolean().default(false),
-        log_lines: z.number().int().min(1).max(1000).default(40),
+        ...restartArgs,
       },
       annotations: { destructiveHint: true },
     },
-    async ({ slug, path, restart, log_lines, ...opts }) => {
+    async ({ slug, path, restart, log_lines, settle_seconds, ...opts }) => {
       const dir = await addonDir(slug);
       const written = await writeFileAt(join(dir, path), [dir], opts);
-      return result({ written, ...(restart ? { restart: await restartAndCheck(slug, log_lines) } : {}) });
+      return result({
+        written,
+        ...(restart ? { restart: await restartAndCheck(slug, log_lines, settle_seconds) } : {}),
+      });
     },
   );
 
   server.registerTool(
     'addon_restart',
     {
-      description: 'Restart an add-on, then return its state and its latest log lines.',
-      inputSchema: { slug: slugArg, log_lines: z.number().int().min(1).max(1000).default(40) },
+      description: 'Restart an add-on, then return its state and what it has logged since this start.',
+      inputSchema: { slug: slugArg, ...restartArgs },
       annotations: { destructiveHint: true },
     },
-    async ({ slug, log_lines }) => result(await restartAndCheck(slug, log_lines)),
+    async ({ slug, log_lines, settle_seconds }) => result(await restartAndCheck(slug, log_lines, settle_seconds)),
   );
 
   server.registerTool(

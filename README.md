@@ -28,8 +28,8 @@ Home Assistant tools:
 | `system_overview` | Core, Supervisor and OS versions and pending updates, disk, health, and every add-on (slug, state, version, config dir). Start here |
 | `addon_list_files` | List an add-on's config dir, by slug |
 | `addon_read_file` | Read a file in an add-on's config dir |
-| `addon_write_file` | Write a file in an add-on's config dir; with `restart: true`, also restart the add-on and return its state and latest log lines |
-| `addon_restart` | Restart an add-on, then return its state and latest log lines |
+| `addon_write_file` | Write a file in an add-on's config dir; with `restart: true`, also restart the add-on and return its state and what it logged since starting |
+| `addon_restart` | Restart an add-on, wait `settle_seconds` (default 5), then return its state and what it logged since starting |
 | `addon_logs` | An add-on's latest log lines |
 | `core_check_config` | Validate Core's configuration, as `ha core check` does. Run it before restarting Core after editing `/config` |
 
@@ -103,8 +103,41 @@ Claude Code (`~/.claude.json`, or `claude mcp add`):
 }
 ```
 
-The endpoint is plain HTTP on the LAN, the same as ha-mcp's. Don't expose
-port 9584 beyond networks you trust.
+Port 9584 speaks plain HTTP, so the token crosses the network in the clear.
+Don't expose the port beyond networks you trust, and prefer putting TLS in
+front of it (next section).
+
+## Put TLS in front
+
+Any reverse proxy on the box works. With a host-network proxy add-on, such as
+a Caddy add-on that already terminates TLS for Home Assistant, a site block is
+enough:
+
+```caddy
+ha-mcp.example.com {
+	@mcp {
+		remote_ip 192.168.0.0/16
+		path /mcp
+	}
+	handle @mcp {
+		reverse_proxy 127.0.0.1:9584
+	}
+	handle {
+		respond 403
+	}
+}
+```
+
+Then point the client at `https://ha-mcp.example.com/mcp`, and narrow
+`allow_cidrs` so only the proxy can reach port 9584. The proxy's connections
+arrive through Docker's port publishing, so the add-on sees them from the
+`hassio` network gateway, usually `172.30.32.1`. Its `denied: source …` log
+line shows the exact address. On the deployment this was written for, that's
+`allow_cidrs: [172.30.32.1/32, 127.0.0.0/8]`. Direct requests to port 9584 then
+get 403, even with the token.
+
+The hostname needs no public DNS record. A DNS-01 ACME challenge issues the
+certificate, and a local DNS override points LAN clients at the box.
 
 ## Develop
 

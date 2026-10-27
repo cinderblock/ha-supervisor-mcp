@@ -53,6 +53,18 @@ export async function addonLogs(slug: string, lines: number): Promise<string> {
     Range: `entries=:-${lines}:`,
   });
   if (res.status !== 200) throw new Error(`Supervisor GET /addons/${slug}/logs failed: ${res.status} ${res.body}`);
-  const all = String(res.body).replace(/\n$/, '').split('\n');
-  return all.slice(-lines).join('\n') + '\n';
+  return lastLines(String(res.body), lines);
+}
+
+/** The last `lines` lines an add-on has logged since its container last started. */
+export async function addonLogsSinceStart(slug: string, lines: number): Promise<string> {
+  const res = await supervisor('GET', `/addons/${slug}/logs/latest`, undefined, { Accept: 'text/plain' });
+  if (res.status !== 200) {
+    throw new Error(`Supervisor GET /addons/${slug}/logs/latest failed: ${res.status} ${res.body}`);
+  }
+  return lastLines(String(res.body), lines);
+}
+
+function lastLines(text: string, lines: number): string {
+  return text.replace(/\n$/, '').split('\n').slice(-lines).join('\n') + '\n';
 }

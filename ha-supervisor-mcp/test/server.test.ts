@@ -57,6 +57,11 @@ beforeAll(async () => {
         const lines = Array.from({ length: n + 1 }, (_, i) => `line${i} accept=${req.headers.get('accept')}`);
         return new Response(lines.join('\n') + '\n', { headers: { 'Content-Type': 'text/plain' } });
       }
+      if (path === '/addons/caddy/logs/latest') {
+        // Mimic Supervisor: the whole log of the current container run, no Range.
+        const lines = Array.from({ length: 9 }, (_, i) => `run${i} accept=${req.headers.get('accept')}`);
+        return new Response(lines.join('\n') + '\n', { headers: { 'Content-Type': 'text/plain' } });
+      }
       if (path === '/core/check' && checkFails) {
         return Response.json({ result: 'error', message: 'Invalid config for [http]' }, { status: 400 });
       }
@@ -242,13 +247,16 @@ describe('tools', () => {
       create_dirs: true,
       restart: true,
       log_lines: 7,
+      settle_seconds: 0,
     });
     expect(w.isError).toBe(false);
     expect(await readFile(join(root, 'caddy', 'sites.d', 'a.caddy'), 'utf8')).toBe('a {}\n');
     expect(w.json.restart).toMatchObject({ slug: 'caddy', state: 'started' });
-    expect(w.json.restart.logs).toBe(
-      [1, 2, 3, 4, 5, 6, 7].map(i => `line${i} accept=text/plain`).join('\n') + '\n',
-    );
+    // Restart results come from /logs/latest (this run only), trimmed to log_lines.
+    expect(w.json.restart.logs).toBe([2, 3, 4, 5, 6, 7, 8].map(i => `run${i} accept=text/plain`).join('\n') + '\n');
+    // addon_logs still reads the journal tail across runs (Range: entries=:-N: → N+1, trimmed).
+    const tail = await call(client, 'addon_logs', { slug: 'caddy', lines: 3 });
+    expect(tail.json.logs).toBe([1, 2, 3].map(i => `line${i} accept=text/plain`).join('\n') + '\n');
     expect(supervisorCalls.some(c => c.method === 'POST' && c.path === '/addons/caddy/restart')).toBe(true);
 
     const r = await call(client, 'addon_read_file', { slug: 'caddy', path: 'sites.d/a.caddy' });
