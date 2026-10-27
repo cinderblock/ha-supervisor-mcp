@@ -52,9 +52,10 @@ beforeAll(async () => {
       if (req.headers.get('authorization') !== 'Bearer sup-token') return new Response('no', { status: 401 });
       const path = new URL(req.url).pathname;
       if (path === '/addons/caddy/logs') {
-        return new Response(`range=${req.headers.get('range')} accept=${req.headers.get('accept')}\n`, {
-          headers: { 'Content-Type': 'text/plain' },
-        });
+        // Mimic Supervisor: `entries=:-N:` yields N+1 entries.
+        const n = Number(req.headers.get('range')?.match(/^entries=:-(\d+):$/)?.[1]);
+        const lines = Array.from({ length: n + 1 }, (_, i) => `line${i} accept=${req.headers.get('accept')}`);
+        return new Response(lines.join('\n') + '\n', { headers: { 'Content-Type': 'text/plain' } });
       }
       if (path === '/core/check' && checkFails) {
         return Response.json({ result: 'error', message: 'Invalid config for [http]' }, { status: 400 });
@@ -245,7 +246,9 @@ describe('tools', () => {
     expect(w.isError).toBe(false);
     expect(await readFile(join(root, 'caddy', 'sites.d', 'a.caddy'), 'utf8')).toBe('a {}\n');
     expect(w.json.restart).toMatchObject({ slug: 'caddy', state: 'started' });
-    expect(w.json.restart.logs).toBe('range=entries=:-7: accept=text/plain\n');
+    expect(w.json.restart.logs).toBe(
+      [1, 2, 3, 4, 5, 6, 7].map(i => `line${i} accept=text/plain`).join('\n') + '\n',
+    );
     expect(supervisorCalls.some(c => c.method === 'POST' && c.path === '/addons/caddy/restart')).toBe(true);
 
     const r = await call(client, 'addon_read_file', { slug: 'caddy', path: 'sites.d/a.caddy' });

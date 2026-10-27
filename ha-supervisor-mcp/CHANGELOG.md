@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- `addon_logs` and the logs returned by `addon_restart` / `addon_write_file`
+  returned one line too many: Supervisor's `Range: entries=:-N:` yields N+1
+  entries. Trimmed to the newest N.
+
 ## 0.2.0
 
 - **Renamed** from `ha-ops-mcp` to `ha-supervisor-mcp` (slug, image

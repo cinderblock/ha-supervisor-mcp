@@ -1,5 +1,5 @@
 name: HA Supervisor MCP
-version: "0.2.0"
+version: "0.2.1"
 slug: ha-supervisor-mcp
 description: MCP server for agents at the Supervisor level - add-on config dirs and logs, files, backups, a shell, and the Supervisor API.
 url: https://github.com/cinderblock/ha-supervisor-mcp/tree/master/ha-supervisor-mcp

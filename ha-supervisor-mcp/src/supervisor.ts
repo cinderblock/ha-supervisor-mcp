@@ -46,10 +46,13 @@ export async function supervisorData<T = Record<string, unknown>>(
 
 /** The last `lines` journal lines of an add-on, as text. */
 export async function addonLogs(slug: string, lines: number): Promise<string> {
+  // `entries=:-N:` starts N entries before the newest one, so it returns N+1
+  // (checked against Supervisor 2026.10); trim to the newest N.
   const res = await supervisor('GET', `/addons/${slug}/logs`, undefined, {
     Accept: 'text/plain',
     Range: `entries=:-${lines}:`,
   });
   if (res.status !== 200) throw new Error(`Supervisor GET /addons/${slug}/logs failed: ${res.status} ${res.body}`);
-  return String(res.body);
+  const all = String(res.body).replace(/\n$/, '').split('\n');
+  return all.slice(-lines).join('\n') + '\n';
 }
