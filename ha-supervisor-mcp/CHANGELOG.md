@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.3
+
+- Stops and restarts take about a second instead of ten, and a call in flight
+  finishes instead of being cut off. The server runs as PID 1 without an init,
+  so it ignored SIGTERM until Docker's SIGKILL 10 s later, which dropped any
+  open request (a proxy in front reported `EOF`). It now stops accepting
+  connections on SIGTERM, lets running calls finish for up to 8 s
+  (`DRAIN_MS`), and exits.
+- `GET /mcp` answers 405. The server is stateless and never pushes messages,
+  but it used to accept the optional standalone SSE stream and hold every
+  client's GET open forever. MCP clients treat 405 as "no stream" and carry on.
+
 ## 0.2.2
 
 - `addon_restart` and `addon_write_file` with `restart: true` returned log

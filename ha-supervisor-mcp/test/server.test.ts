@@ -124,6 +124,17 @@ describe('auth', () => {
     await expect(connect('wrong')).rejects.toThrow();
   });
 
+  test('GET (standalone SSE stream) is 405, and a client still connects', async () => {
+    const res = await fetch(url(), {
+      headers: { Authorization: `Bearer ${config.token}`, Accept: 'text/event-stream' },
+    });
+    expect(res.status).toBe(405);
+    expect(res.headers.get('allow')).toBe('POST, DELETE');
+    const client = await connect();
+    expect((await client.listTools()).tools.length).toBeGreaterThan(0);
+    await client.close();
+  });
+
   test('other paths are 404', async () => {
     const res = await fetch(new URL('/', url()), { headers: { Authorization: `Bearer ${config.token}` } });
     expect(res.status).toBe(404);

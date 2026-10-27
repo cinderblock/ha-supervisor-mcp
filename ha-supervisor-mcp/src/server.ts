@@ -37,6 +37,15 @@ export function startServer(config: Config) {
         console.log(`denied: bad or missing bearer token from ${ip}`);
         return new Response('unauthorized\n', { status: 401, headers: { 'WWW-Authenticate': 'Bearer' } });
       }
+      // Stateless: there is never anything to push, so decline the optional
+      // standalone SSE stream (the spec's 405). Accepting it would park every
+      // client's GET forever and keep a graceful shutdown from finishing.
+      if (req.method === 'GET') {
+        return new Response('no standalone SSE stream: this server is stateless\n', {
+          status: 405,
+          headers: { Allow: 'POST, DELETE' },
+        });
+      }
       const server = new McpServer({ name: 'ha-supervisor-mcp', version: pkg.version }, { instructions: INSTRUCTIONS });
       registerHaTools(server, config);
       registerTools(server, config);

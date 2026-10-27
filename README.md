@@ -120,7 +120,11 @@ ha-mcp.example.com {
 		path /mcp
 	}
 	handle @mcp {
-		reverse_proxy 127.0.0.1:9584
+		reverse_proxy 127.0.0.1:9584 {
+			# Hold calls while the add-on restarts (see below).
+			lb_try_duration 45s
+			lb_try_interval 500ms
+		}
 	}
 	handle {
 		respond 403
@@ -135,6 +139,15 @@ arrive through Docker's port publishing, so the add-on sees them from the
 line shows the exact address. On the deployment this was written for, that's
 `allow_cidrs: [172.30.32.1/32, 127.0.0.0/8]`. Direct requests to port 9584 then
 get 403, even with the token.
+
+The server is stateless (no MCP session to lose), so a client needs no
+reconnect after the add-on restarts or the host reboots: its next call just
+works once the add-on is listening again. `lb_try_duration` makes the proxy
+hold a call through that gap instead of failing it. Caddy only retries a POST
+whose connection never got through, so a call can't run twice. Docker's port
+publishing accepts connections for the second or so while a new container is
+starting, so a call that lands in exactly that window can still fail; retrying
+it is safe.
 
 The hostname needs no public DNS record. A DNS-01 ACME challenge issues the
 certificate, and a local DNS override points LAN clients at the box.
@@ -151,7 +164,8 @@ bun test
 The tests run the real HTTP server and MCP client against temp directories and
 a fake Supervisor. For a local run, set `DATA_DIR` (containing an
 `options.json`), `FILE_ROOTS` (comma-separated), `ADDON_CONFIGS_DIR`, `PORT`
-and, if `bash` isn't at `/bin/bash`, `EXEC_SHELL`.
+and, if `bash` isn't at `/bin/bash`, `EXEC_SHELL`. `DRAIN_MS` (default 8000)
+is how long a SIGTERM waits for running calls before exiting.
 
 CI (`.github/workflows/build.yaml`) tests, then builds natively on amd64 and
 arm64 runners, then publishes the multi-arch `ghcr.io/cinderblock/ha-supervisor-mcp:<version>`
